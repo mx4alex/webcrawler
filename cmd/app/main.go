@@ -15,15 +15,20 @@ func main() {
 		log.Fatalf("Error creating Elasticsearch client: %s", err)
 	}
 
-	urlQueue, err := storage.NewURLQueue("localhost:6379", "", "url_queue")
+	urlQueue, err := storage.NewRedisStorage("localhost:6379", "", "url_queue")
 	if err != nil {
 		log.Fatalf("Error creating URL queue: %s", err)
+	}
+
+	urlSet, err := storage.NewRedisStorage("localhost:6379", "", "url_set")
+	if err != nil {
+		log.Fatalf("Error creating URL set: %s", err)
 	}
 
 	service := usecase.NewService(esClient)
 	h := handler.NewHandler(service)
 
-	crwl := crawler.NewCrawler(service, make(map[string]struct{}), urlQueue)
+	crwl := crawler.NewCrawler(service, urlSet, urlQueue)
 
 	crwl.RunCrawl("https://www.vesti.ru/")
 

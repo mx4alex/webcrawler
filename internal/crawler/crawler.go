@@ -13,12 +13,12 @@ import (
 
 type Crawler struct {
 	service *usecase.Service
-	links   map[string]struct{}
-	queue   *storage.URLQueue
+	links   *storage.RedisStorage
+	queue   *storage.RedisStorage
 	mu      sync.Mutex
 }
 
-func NewCrawler(service *usecase.Service, links map[string]struct{}, queue *storage.URLQueue) *Crawler {
+func NewCrawler(service *usecase.Service, links *storage.RedisStorage, queue *storage.RedisStorage) *Crawler {
 	return &Crawler{
 		service: service,
 		links:   links,
@@ -33,9 +33,15 @@ type PageData struct {
 }
 
 func (c *Crawler) RunCrawl(startURL string) error {
-	data := c.Crawl(startURL)
-	err := c.service.AddData(data)
+	data, err := c.Crawl(startURL)
 	if err != nil {
+		fmt.Printf("Error in Crawl: %v", err)
+		return err
+	}
+
+	err = c.service.AddData(data)
+	if err != nil {
+		fmt.Printf("Error in AddData: %v", err)
 		return err
 	}
 
@@ -48,13 +54,22 @@ func (c *Crawler) RunCrawl(startURL string) error {
 			defer wg.Done()
 			for url := range workerInput {
 				c.mu.Lock()
-				_, ok := c.links[url]
+				ok, err := c.links.LinkExists(url)
+				if err != nil {
+					fmt.Printf("Error in LinkExists: %v", err)
+					return
+				}
 				c.mu.Unlock()
+
 				if !ok {
-					data := c.Crawl(url)
-					err := c.service.AddData(data)
+					data, err := c.Crawl(url)
 					if err != nil {
-						fmt.Println(err)
+						fmt.Printf("Error in Crawl: %v", err)
+						return
+					}
+					err = c.service.AddData(data)
+					if err != nil {
+						fmt.Printf("Error in AddData: %v", err)
 						return
 					}
 				}
@@ -89,10 +104,14 @@ func (c *Crawler) RunCrawl(startURL string) error {
 	return nil
 }
 
-func (c *Crawler) Crawl(url string) elastic.ElasticData {
+func (c *Crawler) Crawl(url string) (elastic.ElasticData, error) {
 	fmt.Printf("GET URL: %s\n", url)
 	c.mu.Lock()
-	c.links[url] = struct{}{}
+	err := c.links.AddLink(url)
+	if err != nil {
+		fmt.Printf("Error in AddLink: %v", err)
+		return elastic.ElasticData{}, err
+	}
 	c.mu.Unlock()
 
 	double := make(map[string]struct{})
@@ -120,8 +139,17 @@ func (c *Crawler) Crawl(url string) elastic.ElasticData {
 				double[link] = struct{}{}
 
 				c.mu.Lock()
-				if _, ok := c.links[link]; !ok {
-					c.queue.Push(link)
+				ok, err := c.links.LinkExists(link)
+				if err != nil {
+					fmt.Printf("Error in LinkExists: %v", err)
+					return
+				}
+				if !ok {
+					err = c.queue.Push(link)
+					if err != nil {
+						fmt.Printf("Error in Push: %v", err)
+						return
+					}
 				}
 				c.mu.Unlock()
 
@@ -129,9 +157,10 @@ func (c *Crawler) Crawl(url string) elastic.ElasticData {
 		}
 	})
 
-	err := collector.Visit(url)
+	err = collector.Visit(url)
 	if err != nil {
-		fmt.Errorf("Error in Visit URL %s: %s", url, err)
+		fmt.Printf("Error in Visit URL %s: %s", url, err)
+		return elastic.ElasticData{}, err
 	}
 
 	var text strings.Builder
@@ -146,5 +175,5 @@ func (c *Crawler) Crawl(url string) elastic.ElasticData {
 
 	elasticData.Content = text.String()
 
-	return elasticData
+	return elasticData, nil
 }
