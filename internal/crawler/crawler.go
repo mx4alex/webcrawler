@@ -7,17 +7,18 @@ import (
 	"sync"
 	"webcrawler/internal/elastic"
 	"webcrawler/internal/extracter"
+	"webcrawler/internal/storage"
 	"webcrawler/internal/usecase"
 )
 
 type Crawler struct {
 	service *usecase.Service
 	links   map[string]struct{}
-	queue   []string
+	queue   *storage.URLQueue
 	mu      sync.Mutex
 }
 
-func NewCrawler(service *usecase.Service, links map[string]struct{}, queue []string) *Crawler {
+func NewCrawler(service *usecase.Service, links map[string]struct{}, queue *storage.URLQueue) *Crawler {
 	return &Crawler{
 		service: service,
 		links:   links,
@@ -62,11 +63,24 @@ func (c *Crawler) RunCrawl(startURL string) error {
 	}
 
 	var nextURL string
-	for len(c.queue) != 0 && len(c.queue) < 10000 {
-		nextURL = c.queue[0]
+	lenght, err := c.queue.Length()
+	if err != nil {
+		return err
+	}
+
+	for lenght != 0 && lenght < 1000 {
+		nextURL, err = c.queue.Pop()
+		if err != nil {
+			return err
+		}
+
 		workerInput <- nextURL
 
-		c.queue = c.queue[1:]
+		lenght, err = c.queue.Length()
+		if err != nil {
+			return err
+		}
+
 	}
 
 	close(workerInput)
@@ -107,7 +121,7 @@ func (c *Crawler) Crawl(url string) elastic.ElasticData {
 
 				c.mu.Lock()
 				if _, ok := c.links[link]; !ok {
-					c.queue = append(c.queue, link)
+					c.queue.Push(link)
 				}
 				c.mu.Unlock()
 
