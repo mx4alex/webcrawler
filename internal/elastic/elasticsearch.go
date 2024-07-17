@@ -34,7 +34,7 @@ func NewElasticsearchClient(urls []string, index string) (*ElasticsearchClient, 
 func (es *ElasticsearchClient) IndexDocument(doc ElasticData) error {
 	body, err := json.Marshal(doc)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error marshalling doc: %v", err)
 	}
 
 	req := esapi.IndexRequest{
@@ -78,7 +78,7 @@ func (es *ElasticsearchClient) SearchDocument(searchWords []string) ([]string, e
 
 	queryJSON, err := json.Marshal(query)
 	if err != nil {
-		return nil, fmt.Errorf("Error encoding query: %v", err)
+		return nil, fmt.Errorf("Error marshalling query: %v", err)
 	}
 
 	req := esapi.SearchRequest{
@@ -112,6 +112,7 @@ func (es *ElasticsearchClient) SearchDocument(searchWords []string) ([]string, e
 			}
 		}
 	}
+
 	var r []string
 	for url := range urls {
 		r = append(r, url)

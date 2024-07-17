@@ -3,36 +3,32 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
 	"webcrawler/internal/elastic"
-	"webcrawler/internal/router"
 )
 
 type Handler struct {
-	elc *elastic.ElasticsearchClient
+	Logger *zap.SugaredLogger
+	elc    *elastic.ElasticsearchClient
 }
 
-func NewHandler(elc *elastic.ElasticsearchClient) *Handler {
-	return &Handler{elc}
+func NewHandler(logger *zap.SugaredLogger, elc *elastic.ElasticsearchClient) *Handler {
+	return &Handler{
+		Logger: logger,
+		elc:    elc,
+	}
 }
 
 type Response struct {
 	URLs []string `json:"urls"`
 }
 
-func (h *Handler) InitRoutes() {
-	r := router.NewRouter()
-
-	r.Handle("GET", "/webcrawler/search", h.getUrls)
-
-	fmt.Println("Server is running at :8080")
-	http.ListenAndServe(":8080", r)
-}
-
-func (h *Handler) getUrls(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetUrls(w http.ResponseWriter, r *http.Request) {
 	args := strings.Split(r.URL.Path, "/")
 	if len(args) != 4 {
+		h.Logger.Infow("Not correct parameters", "path", r.URL.Path)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -44,6 +40,7 @@ func (h *Handler) getUrls(w http.ResponseWriter, r *http.Request) {
 
 	urls, err := h.elc.SearchDocument(searchWords)
 	if err != nil {
+		h.Logger.Infow("Error in Search Document", err)
 		http.Error(w, fmt.Sprintf("Error SearchURLs: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -53,6 +50,7 @@ func (h *Handler) getUrls(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
+		h.Logger.Infow("Error in Encode Response", err)
 		http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
 		return
 	}

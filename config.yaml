@@ -1,4 +1,4 @@
-host_addr: "http://localhost:8080"
+host_addr: ":8080"
 start_url: "https://www.vesti.ru/"
 
 elastic:
