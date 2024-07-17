@@ -1,0 +1,12 @@
+host_addr: "http://localhost:8080"
+start_url: "https://www.vesti.ru/"
+
+elastic:
+  addr: "http://localhost:9200"
+  index: "webpages"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  queue_key: "url_queue"
+  set_key: "url_set"

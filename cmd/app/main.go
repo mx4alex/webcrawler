@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"webcrawler/internal/config"
 	"webcrawler/internal/crawler"
 	"webcrawler/internal/elastic"
 	"webcrawler/internal/handler"
@@ -10,17 +11,24 @@ import (
 )
 
 func main() {
-	esClient, err := elastic.NewElasticsearchClient([]string{"http://localhost:9200"}, "webpages")
+	appConfig, err := config.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	elasticConfig := appConfig.Elastic
+	esClient, err := elastic.NewElasticsearchClient([]string{elasticConfig.Addr}, elasticConfig.Index)
 	if err != nil {
 		log.Fatalf("Error creating Elasticsearch client: %s", err)
 	}
 
-	urlQueue, err := storage.NewRedisStorage("localhost:6379", "", "url_queue")
+	redisConfig := appConfig.Redis
+	urlQueue, err := storage.NewRedisStorage(redisConfig.Addr, redisConfig.Password, redisConfig.QueueKey)
 	if err != nil {
 		log.Fatalf("Error creating URL queue: %s", err)
 	}
 
-	urlSet, err := storage.NewRedisStorage("localhost:6379", "", "url_set")
+	urlSet, err := storage.NewRedisStorage(redisConfig.Addr, redisConfig.Password, redisConfig.SetKey)
 	if err != nil {
 		log.Fatalf("Error creating URL set: %s", err)
 	}
@@ -30,7 +38,7 @@ func main() {
 
 	crwl := crawler.NewCrawler(service, urlSet, urlQueue)
 
-	crwl.RunCrawl("https://www.vesti.ru/")
+	crwl.RunCrawl(appConfig.StartURL)
 
 	h.InitRoutes()
 }

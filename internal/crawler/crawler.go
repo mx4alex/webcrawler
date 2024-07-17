@@ -95,7 +95,6 @@ func (c *Crawler) RunCrawl(startURL string) error {
 		if err != nil {
 			return err
 		}
-
 	}
 
 	close(workerInput)
