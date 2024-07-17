@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"webcrawler/internal/elastic"
 	"webcrawler/internal/router"
-	"webcrawler/internal/usecase"
 )
 
 type Handler struct {
-	service *usecase.Service
+	elc *elastic.ElasticsearchClient
 }
 
-func NewHandler(service *usecase.Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(elc *elastic.ElasticsearchClient) *Handler {
+	return &Handler{elc}
 }
 
 type Response struct {
@@ -42,7 +42,7 @@ func (h *Handler) getUrls(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println(searchWords)
 
-	urls, err := h.service.SearchURLs(searchWords)
+	urls, err := h.elc.SearchDocument(searchWords)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error SearchURLs: %v", err), http.StatusInternalServerError)
 		return

@@ -57,7 +57,30 @@ func (es *ElasticsearchClient) IndexDocument(doc ElasticData) error {
 	return nil
 }
 
-func (es *ElasticsearchClient) SearchDocument(queryJSON []byte) ([]string, error) {
+func (es *ElasticsearchClient) SearchDocument(searchWords []string) ([]string, error) {
+	query := map[string]interface{}{
+		"query": map[string]interface{}{
+			"bool": map[string]interface{}{
+				"should": func() []map[string]interface{} {
+					queries := make([]map[string]interface{}, len(searchWords))
+					for i, word := range searchWords {
+						queries[i] = map[string]interface{}{
+							"match": map[string]interface{}{
+								"content": word,
+							},
+						}
+					}
+					return queries
+				}(),
+			},
+		},
+	}
+
+	queryJSON, err := json.Marshal(query)
+	if err != nil {
+		return nil, fmt.Errorf("Error encoding query: %v", err)
+	}
+
 	req := esapi.SearchRequest{
 		Index: []string{es.index},
 		Body:  strings.NewReader(string(queryJSON)),

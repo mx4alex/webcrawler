@@ -8,21 +8,20 @@ import (
 	"webcrawler/internal/elastic"
 	"webcrawler/internal/extracter"
 	"webcrawler/internal/storage"
-	"webcrawler/internal/usecase"
 )
 
 type Crawler struct {
-	service *usecase.Service
-	links   *storage.RedisStorage
-	queue   *storage.RedisStorage
-	mu      sync.Mutex
+	elc   *elastic.ElasticsearchClient
+	links *storage.RedisStorage
+	queue *storage.RedisStorage
+	mu    sync.Mutex
 }
 
-func NewCrawler(service *usecase.Service, links *storage.RedisStorage, queue *storage.RedisStorage) *Crawler {
+func NewCrawler(elc *elastic.ElasticsearchClient, links *storage.RedisStorage, queue *storage.RedisStorage) *Crawler {
 	return &Crawler{
-		service: service,
-		links:   links,
-		queue:   queue,
+		elc:   elc,
+		links: links,
+		queue: queue,
 	}
 }
 
@@ -39,7 +38,7 @@ func (c *Crawler) RunCrawl(startURL string) error {
 		return err
 	}
 
-	err = c.service.AddData(data)
+	err = c.elc.IndexDocument(data)
 	if err != nil {
 		fmt.Printf("Error in AddData: %v", err)
 		return err
@@ -67,7 +66,7 @@ func (c *Crawler) RunCrawl(startURL string) error {
 						fmt.Printf("Error in Crawl: %v", err)
 						return
 					}
-					err = c.service.AddData(data)
+					err = c.elc.IndexDocument(data)
 					if err != nil {
 						fmt.Printf("Error in AddData: %v", err)
 						return

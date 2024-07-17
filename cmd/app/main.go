@@ -7,7 +7,6 @@ import (
 	"webcrawler/internal/elastic"
 	"webcrawler/internal/handler"
 	"webcrawler/internal/storage"
-	"webcrawler/internal/usecase"
 )
 
 func main() {
@@ -33,10 +32,9 @@ func main() {
 		log.Fatalf("Error creating URL set: %s", err)
 	}
 
-	service := usecase.NewService(esClient)
-	h := handler.NewHandler(service)
+	h := handler.NewHandler(esClient)
 
-	crwl := crawler.NewCrawler(service, urlSet, urlQueue)
+	crwl := crawler.NewCrawler(esClient, urlSet, urlQueue)
 
 	crwl.RunCrawl(appConfig.StartURL)
 
