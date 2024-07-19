@@ -8,16 +8,12 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"strings"
+	"webcrawler/internal/entity"
 )
 
 type ElasticsearchClient struct {
 	client *elasticsearch.Client
 	index  string
-}
-
-type ElasticData struct {
-	URL     string `json:"url"`
-	Content string `json:"content"`
 }
 
 func NewElasticsearchClient(urls []string, index string) (*ElasticsearchClient, error) {
@@ -31,7 +27,7 @@ func NewElasticsearchClient(urls []string, index string) (*ElasticsearchClient, 
 	return &ElasticsearchClient{client: es, index: index}, nil
 }
 
-func (es *ElasticsearchClient) IndexDocument(doc ElasticData) error {
+func (es *ElasticsearchClient) IndexDocument(doc entity.ElasticData) error {
 	body, err := json.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("Error marshalling doc: %v", err)
@@ -39,7 +35,7 @@ func (es *ElasticsearchClient) IndexDocument(doc ElasticData) error {
 
 	req := esapi.IndexRequest{
 		Index:      es.index,
-		DocumentID: "",
+		DocumentID: doc.ID,
 		Body:       bytes.NewReader(body),
 		Refresh:    "true",
 	}
@@ -57,7 +53,7 @@ func (es *ElasticsearchClient) IndexDocument(doc ElasticData) error {
 	return nil
 }
 
-func (es *ElasticsearchClient) SearchDocument(searchWords []string) ([]string, error) {
+func (es *ElasticsearchClient) SearchDocument(searchWords []string) ([]entity.ElasticData, error) {
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -101,22 +97,20 @@ func (es *ElasticsearchClient) SearchDocument(searchWords []string) ([]string, e
 		return nil, fmt.Errorf("Error decoding Elasticsearch response: %v", err)
 	}
 
-	urls := make(map[string]struct{}, 0)
+	var searchResults []entity.ElasticData
 	hits, found := result["hits"].(map[string]interface{})["hits"].([]interface{})
 	if found {
 		for _, hit := range hits {
-			source := hit.(map[string]interface{})["_source"].(map[string]interface{})
+			hitMap := hit.(map[string]interface{})
+			source := hitMap["_source"].(map[string]interface{})
+			id := hitMap["_id"].(string)
 			url := source["url"].(string)
-			if _, ok := urls[url]; !ok {
-				urls[url] = struct{}{}
-			}
+			searchResults = append(searchResults, entity.ElasticData{
+				ID:  id,
+				URL: url,
+			})
 		}
 	}
 
-	var r []string
-	for url := range urls {
-		r = append(r, url)
-	}
-
-	return r, nil
+	return searchResults, nil
 }

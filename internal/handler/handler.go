@@ -7,22 +7,21 @@ import (
 	"net/http"
 	"strings"
 	"webcrawler/internal/elastic"
+	"webcrawler/internal/storage"
 )
 
 type Handler struct {
-	Logger *zap.SugaredLogger
-	elc    *elastic.ElasticsearchClient
+	Logger   *zap.SugaredLogger
+	elc      *elastic.ElasticsearchClient
+	postgres *storage.PostgresStorage
 }
 
-func NewHandler(logger *zap.SugaredLogger, elc *elastic.ElasticsearchClient) *Handler {
+func NewHandler(logger *zap.SugaredLogger, elc *elastic.ElasticsearchClient, postgres *storage.PostgresStorage) *Handler {
 	return &Handler{
-		Logger: logger,
-		elc:    elc,
+		Logger:   logger,
+		elc:      elc,
+		postgres: postgres,
 	}
-}
-
-type Response struct {
-	URLs []string `json:"urls"`
 }
 
 func (h *Handler) GetUrls(w http.ResponseWriter, r *http.Request) {
@@ -38,14 +37,29 @@ func (h *Handler) GetUrls(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println(searchWords)
 
-	urls, err := h.elc.SearchDocument(searchWords)
+	elasticData, err := h.elc.SearchDocument(searchWords)
 	if err != nil {
 		h.Logger.Infow("Error in Search Document", err)
 		http.Error(w, fmt.Sprintf("Error SearchURLs: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	response := Response{URLs: urls}
+	var response []Response
+	for _, data := range elasticData {
+		pageData, err := h.postgres.GetPage(data.ID)
+
+		if err != nil {
+			h.Logger.Infow("Error in GetPage", "ID", data.ID, "error", err)
+			http.Error(w, fmt.Sprintf("Error GetPage: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		subtext := SearchContext(pageData.Content, words, 5)
+		response = append(response, Response{
+			URL:  data.URL,
+			Text: subtext,
+		})
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)

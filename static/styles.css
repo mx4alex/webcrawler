@@ -6,7 +6,8 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
+    min-height: 100vh;
+    flex-direction: column;
 }
 
 .container {
@@ -17,6 +18,7 @@ body {
     width: 400px;
     text-align: center;
     color: white;
+    margin-top: 20px;
 }
 
 h1 {
@@ -64,6 +66,8 @@ button:hover {
     border: 1px solid #ddd;
     border-radius: 5px;
     margin-bottom: 10px;
+    overflow: auto;
+    max-height: 100vh;
 }
 
 .result-item a {
@@ -73,4 +77,9 @@ button:hover {
 
 .result-item a:hover {
     text-decoration: underline;
+}
+
+.result-item p {
+    color: #5e5e5e;
+    text-decoration: none;
 }

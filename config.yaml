@@ -1,5 +1,6 @@
 host_addr: ":8080"
 start_url: "https://www.vesti.ru/"
+count_workers: 50
 
 elastic:
   addr: "http://localhost:9200"
@@ -10,3 +11,11 @@ redis:
   password: ""
   queue_key: "url_queue"
   set_key: "url_set"
+
+postgres:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "qwerty"
+  dbname: "postgres"
+  sslmode: "disable"

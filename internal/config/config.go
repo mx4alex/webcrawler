@@ -10,10 +10,12 @@ const (
 )
 
 type Config struct {
-	HostAddr string        `mapstructure:"host_addr"`
-	StartURL string        `mapstructure:"start_url"`
-	Elastic  ElasticConfig `mapstructure:"elastic"`
-	Redis    RedisConfig   `mapstructure:"redis"`
+	HostAddr     string         `mapstructure:"host_addr"`
+	StartURL     string         `mapstructure:"start_url"`
+	CountWorkers int            `mapstructure:"count_workers"`
+	Elastic      ElasticConfig  `mapstructure:"elastic"`
+	Redis        RedisConfig    `mapstructure:"redis"`
+	Postgres     PostgresConfig `mapstructure:"postgres"`
 }
 
 type ElasticConfig struct {
@@ -26,6 +28,15 @@ type RedisConfig struct {
 	Password string `mapstructure:"password"`
 	QueueKey string `mapstructure:"queue_key"`
 	SetKey   string `mapstructure:"set_key"`
+}
+
+type PostgresConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	DBName   string `mapstructure:"dbname"`
+	SSLMode  string `mapstructure:"sslmode"`
 }
 
 func New() (Config, error) {

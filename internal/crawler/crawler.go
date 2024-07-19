@@ -3,54 +3,65 @@ package crawler
 import (
 	"fmt"
 	"github.com/gocolly/colly/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"strings"
 	"sync"
 	"webcrawler/internal/elastic"
+	"webcrawler/internal/entity"
 	"webcrawler/internal/extracter"
 	"webcrawler/internal/storage"
 )
 
 type Crawler struct {
-	Logger *zap.SugaredLogger
-	elc    *elastic.ElasticsearchClient
-	links  *storage.RedisStorage
-	queue  *storage.RedisStorage
-	mu     sync.Mutex
+	Logger   *zap.SugaredLogger
+	elc      *elastic.ElasticsearchClient
+	links    *storage.RedisStorage
+	queue    *storage.RedisStorage
+	postgres *storage.PostgresStorage
+	mu       sync.Mutex
 }
 
-func NewCrawler(logger *zap.SugaredLogger, elc *elastic.ElasticsearchClient, links *storage.RedisStorage, queue *storage.RedisStorage) *Crawler {
+func NewCrawler(logger *zap.SugaredLogger, elc *elastic.ElasticsearchClient, links *storage.RedisStorage, queue *storage.RedisStorage, page *storage.PostgresStorage) *Crawler {
 	return &Crawler{
-		Logger: logger,
-		elc:    elc,
-		links:  links,
-		queue:  queue,
+		Logger:   logger,
+		elc:      elc,
+		links:    links,
+		queue:    queue,
+		postgres: page,
 	}
 }
 
-type PageData struct {
-	URL     string
-	Title   string
-	Content string
-}
-
-func (c *Crawler) RunCrawl(startURL string) error {
-	data, err := c.Crawl(startURL)
+func (c *Crawler) RunCrawl(startURL string, countWorkers int) error {
+	exist, err := c.links.LinkExists(startURL)
 	if err != nil {
-		c.Logger.Infow("Error in Crawl", err)
+		c.Logger.Infow("Error in LinkExists", err)
 		return err
 	}
+	if !exist {
+		elasticData, pageData, err := c.Crawl(startURL)
+		if err != nil {
+			c.Logger.Infow("Error in Crawl", err)
+			return err
+		}
 
-	err = c.elc.IndexDocument(data)
-	if err != nil {
-		c.Logger.Infow("Error in AddData", err)
-		return err
+		err = c.elc.IndexDocument(elasticData)
+		if err != nil {
+			c.Logger.Infow("Error in AddData", err)
+			return err
+		}
+
+		err = c.postgres.AddPage(pageData)
+		if err != nil {
+			c.Logger.Infow("Error in AddPage", err)
+			return err
+		}
 	}
 
 	wg := &sync.WaitGroup{}
 	workerInput := make(chan string)
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < countWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -64,14 +75,21 @@ func (c *Crawler) RunCrawl(startURL string) error {
 				c.mu.Unlock()
 
 				if !ok {
-					data, err := c.Crawl(url)
+					elasticData, pageData, err := c.Crawl(url)
 					if err != nil {
 						c.Logger.Infow("Error in Crawl", err)
 						return
 					}
-					err = c.elc.IndexDocument(data)
+
+					err = c.elc.IndexDocument(elasticData)
 					if err != nil {
 						c.Logger.Infow("Error in AddData", err)
+						return
+					}
+
+					err = c.postgres.AddPage(pageData)
+					if err != nil {
+						c.Logger.Infow("Error in AddPage", err)
 						return
 					}
 				}
@@ -90,7 +108,7 @@ func (c *Crawler) RunCrawl(startURL string) error {
 		nextURL, err = c.queue.Pop()
 		if err != nil {
 			c.Logger.Infow("Error in QueuePop", err)
-			return err
+			//return err
 		}
 
 		workerInput <- nextURL
@@ -108,32 +126,33 @@ func (c *Crawler) RunCrawl(startURL string) error {
 	return nil
 }
 
-func (c *Crawler) Crawl(url string) (elastic.ElasticData, error) {
+func (c *Crawler) Crawl(url string) (entity.ElasticData, entity.PageData, error) {
 	fmt.Printf("GET URL: %s\n", url)
 	c.mu.Lock()
 	err := c.links.AddLink(url)
 	if err != nil {
 		c.Logger.Infow("Error in AddLink", err)
-		return elastic.ElasticData{}, err
+		return entity.ElasticData{}, entity.PageData{}, err
 	}
 	c.mu.Unlock()
 
 	double := make(map[string]struct{})
 	collector := colly.NewCollector()
 
-	pageData := PageData{
+	pageData := entity.PageData{
 		URL: url,
 	}
-	elasticData := elastic.ElasticData{
+	elasticData := entity.ElasticData{
 		URL: url,
 	}
 
 	collector.OnHTML("title", func(e *colly.HTMLElement) {
-		pageData.Title = e.Text
+		pageData.Title = e.DOM.Text()
 	})
 
-	collector.OnHTML("body", func(e *colly.HTMLElement) {
-		pageData.Content = e.Text
+	collector.OnHTML("article, main, .content, .post", func(e *colly.HTMLElement) {
+		e.DOM.Find("script, style, nav, footer").Remove()
+		pageData.Content = e.DOM.Text()
 	})
 
 	collector.OnHTML("a[href]", func(e *colly.HTMLElement) {
@@ -164,7 +183,7 @@ func (c *Crawler) Crawl(url string) (elastic.ElasticData, error) {
 	err = collector.Visit(url)
 	if err != nil {
 		c.Logger.Infow("Error in Visit URL", "url", url, "err", err)
-		return elastic.ElasticData{}, err
+		return entity.ElasticData{}, entity.PageData{}, err
 	}
 
 	var text strings.Builder
@@ -177,7 +196,11 @@ func (c *Crawler) Crawl(url string) (elastic.ElasticData, error) {
 		text.WriteString(" ")
 	}
 
+	newID := uuid.New().String()
+	elasticData.ID = newID
 	elasticData.Content = text.String()
 
-	return elasticData, nil
+	pageData.ID = newID
+
+	return elasticData, pageData, nil
 }

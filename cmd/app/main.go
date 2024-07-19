@@ -54,11 +54,17 @@ func main() {
 		return
 	}
 
-	h := handler.NewHandler(logger, esClient)
+	pageStorage, err := storage.NewPostgresStorage(appConfig.Postgres)
+	if err != nil {
+		logger.Infow("Error creating page storage", err)
+		return
+	}
 
-	crwl := crawler.NewCrawler(logger, esClient, urlSet, urlQueue)
+	h := handler.NewHandler(logger, esClient, pageStorage)
 
-	err = crwl.RunCrawl(appConfig.StartURL)
+	crwl := crawler.NewCrawler(logger, esClient, urlSet, urlQueue, pageStorage)
+
+	err = crwl.RunCrawl(appConfig.StartURL, appConfig.CountWorkers)
 	if err != nil {
 		logger.Infow("Error running crawler", err)
 		return
