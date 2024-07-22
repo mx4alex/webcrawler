@@ -10,12 +10,14 @@ const (
 )
 
 type Config struct {
-	HostAddr     string         `mapstructure:"host_addr"`
-	StartURL     string         `mapstructure:"start_url"`
-	CountWorkers int            `mapstructure:"count_workers"`
-	Elastic      ElasticConfig  `mapstructure:"elastic"`
-	Redis        RedisConfig    `mapstructure:"redis"`
-	Postgres     PostgresConfig `mapstructure:"postgres"`
+	HostAddr      string         `mapstructure:"host_addr"`
+	StartURL      string         `mapstructure:"start_url"`
+	CountWorkers  int            `mapstructure:"count_workers"`
+	MaxCountLinks int            `mapstructure:"max_count_links"`
+	CountKeywords int            `mapstructure:"count_keywords"`
+	Elastic       ElasticConfig  `mapstructure:"elastic"`
+	Redis         RedisConfig    `mapstructure:"redis"`
+	Postgres      PostgresConfig `mapstructure:"postgres"`
 }
 
 type ElasticConfig struct {

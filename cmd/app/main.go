@@ -64,7 +64,7 @@ func main() {
 
 	crwl := crawler.NewCrawler(logger, esClient, urlSet, urlQueue, pageStorage)
 
-	err = crwl.RunCrawl(appConfig.StartURL, appConfig.CountWorkers)
+	err = crwl.RunCrawl(appConfig.StartURL, appConfig.CountWorkers, appConfig.MaxCountLinks, appConfig.CountKeywords)
 	if err != nil {
 		logger.Infow("Error running crawler", err)
 		return

@@ -1,6 +1,8 @@
 host_addr: ":8080"
 start_url: "https://www.vesti.ru/"
 count_workers: 50
+max_count_links: 20
+count_keywords: 50
 
 elastic:
   addr: "http://elasticsearch:9200"

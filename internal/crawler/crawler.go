@@ -14,12 +14,13 @@ import (
 )
 
 type Crawler struct {
-	Logger   *zap.SugaredLogger
-	elc      *elastic.ElasticsearchClient
-	links    *storage.RedisStorage
-	queue    *storage.RedisStorage
-	postgres *storage.PostgresStorage
-	mu       sync.Mutex
+	Logger     *zap.SugaredLogger
+	elc        *elastic.ElasticsearchClient
+	links      *storage.RedisStorage
+	queue      *storage.RedisStorage
+	postgres   *storage.PostgresStorage
+	mu         sync.Mutex
+	countLinks int
 }
 
 func NewCrawler(logger *zap.SugaredLogger, elc *elastic.ElasticsearchClient, links *storage.RedisStorage, queue *storage.RedisStorage, page *storage.PostgresStorage) *Crawler {
@@ -32,101 +33,34 @@ func NewCrawler(logger *zap.SugaredLogger, elc *elastic.ElasticsearchClient, lin
 	}
 }
 
-func (c *Crawler) RunCrawl(startURL string, countWorkers int) error {
-	exist, err := c.links.LinkExists(startURL)
+func (c *Crawler) AddData(startURL string, countKeywords int) error {
+	elasticData, pageData, err := c.Crawl(startURL, countKeywords)
 	if err != nil {
-		c.Logger.Infow("Error in LinkExists", err)
-		return err
-	}
-	if !exist {
-		elasticData, pageData, err := c.Crawl(startURL)
-		if err != nil {
-			c.Logger.Infow("Error in Crawl", err)
-			return err
-		}
-
-		err = c.elc.IndexDocument(elasticData)
-		if err != nil {
-			c.Logger.Infow("Error in AddData", err)
-			return err
-		}
-
-		err = c.postgres.AddPage(pageData)
-		if err != nil {
-			c.Logger.Infow("Error in AddPage", err)
-			return err
-		}
-	}
-
-	wg := &sync.WaitGroup{}
-	workerInput := make(chan string)
-
-	for i := 0; i < countWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for url := range workerInput {
-				c.mu.Lock()
-				ok, err := c.links.LinkExists(url)
-				if err != nil {
-					c.Logger.Infow("Error in LinkExists", err)
-					return
-				}
-				c.mu.Unlock()
-
-				if !ok {
-					elasticData, pageData, err := c.Crawl(url)
-					if err != nil {
-						c.Logger.Infow("Error in Crawl", err)
-						return
-					}
-
-					err = c.elc.IndexDocument(elasticData)
-					if err != nil {
-						c.Logger.Infow("Error in AddData", err)
-						return
-					}
-
-					err = c.postgres.AddPage(pageData)
-					if err != nil {
-						c.Logger.Infow("Error in AddPage", err)
-						return
-					}
-				}
-			}
-		}()
-	}
-
-	var nextURL string
-	lenght, err := c.queue.Length()
-	if err != nil {
-		c.Logger.Infow("Error in QueueLength", err)
+		c.Logger.Infow("Error in Crawl", err)
 		return err
 	}
 
-	for lenght != 0 && lenght < 1000 {
-		nextURL, err = c.queue.Pop()
-		if err != nil {
-			c.Logger.Infow("Error in QueuePop", err)
-			//return err
-		}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-		workerInput <- nextURL
-
-		lenght, err = c.queue.Length()
-		if err != nil {
-			c.Logger.Infow("Error in QueueLength", err)
-			return err
-		}
+	err = c.elc.IndexDocument(elasticData)
+	if err != nil {
+		c.Logger.Infow("Error in AddData", err)
+		return err
 	}
 
-	close(workerInput)
-	wg.Wait()
+	err = c.postgres.AddPage(pageData)
+	if err != nil {
+		c.Logger.Infow("Error in AddPage", err)
+		return err
+	}
+
+	c.countLinks++
 
 	return nil
 }
 
-func (c *Crawler) Crawl(url string) (entity.ElasticData, entity.PageData, error) {
+func (c *Crawler) Crawl(url string, countKeywords int) (entity.ElasticData, entity.PageData, error) {
 	fmt.Printf("GET URL: %s\n", url)
 	c.mu.Lock()
 	err := c.links.AddLink(url)
@@ -191,7 +125,7 @@ func (c *Crawler) Crawl(url string) (entity.ElasticData, entity.PageData, error)
 	text.WriteString(" ")
 
 	words := extracter.RunRake(pageData.Content)
-	for i := 0; i < 50 && i < len(words); i++ {
+	for i := 0; i < countKeywords && i < len(words); i++ {
 		text.WriteString(words[i].Key)
 		text.WriteString(" ")
 	}
@@ -203,4 +137,72 @@ func (c *Crawler) Crawl(url string) (entity.ElasticData, entity.PageData, error)
 	pageData.ID = newID
 
 	return elasticData, pageData, nil
+}
+
+func (c *Crawler) RunCrawl(startURL string, countWorkers, maxCountLinks, countKeywords int) error {
+	exist, err := c.links.LinkExists(startURL)
+	if err != nil {
+		c.Logger.Infow("Error in LinkExists", err)
+		return err
+	}
+	if !exist {
+		err = c.AddData(startURL, countKeywords)
+		if err != nil {
+			return err
+		}
+	}
+
+	wg := &sync.WaitGroup{}
+	workerInput := make(chan string)
+
+	for i := 0; i < countWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for url := range workerInput {
+				c.mu.Lock()
+				ok, err := c.links.LinkExists(url)
+				if err != nil {
+					c.Logger.Infow("Error in LinkExists", err)
+					return
+				}
+				c.mu.Unlock()
+
+				if !ok {
+					err = c.AddData(url, countKeywords)
+					if err != nil {
+						return
+					}
+				}
+			}
+		}()
+	}
+
+	var nextURL string
+	lenght, err := c.queue.Length()
+	if err != nil {
+		c.Logger.Infow("Error in QueueLength", err)
+		return err
+	}
+
+	for lenght != 0 && c.countLinks < maxCountLinks {
+		nextURL, err = c.queue.Pop()
+		if err != nil {
+			c.Logger.Infow("Error in QueuePop", err)
+			return err
+		}
+
+		workerInput <- nextURL
+
+		lenght, err = c.queue.Length()
+		if err != nil {
+			c.Logger.Infow("Error in QueueLength", err)
+			return err
+		}
+	}
+
+	close(workerInput)
+	wg.Wait()
+
+	return nil
 }
