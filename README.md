@@ -1,7 +1,7 @@
 # webcrawler
 Сервис, который индексирует web-страницы в Elasticsearch, а также возвращает ссылки на страницы по введенному запросу
 
-№№ Архитектура
+## Архитектура
 ![image](https://github.com/user-attachments/assets/654018cc-4c79-416c-85c7-a2b7f2f2868a)
 Для полнотекстового поиска используется Elasticsearch, в котором хранится ключевые слова содержания web-страниц. Для хранения полной информации о странице используется Postgres.
 
@@ -51,4 +51,4 @@ curl -X GET http://localhost:8080/webcrawler/search/Технология
 ]
 ```
 
-![image](https://github.com/user-attachments/assets/2f1da4df-8aeb-46a5-8fed-efc6926aac94)
+![image](https://github.com/user-attachments/assets/b7794d14-8467-462d-b0dd-e0aa6c3760ec)
