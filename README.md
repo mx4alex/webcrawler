@@ -51,4 +51,5 @@ curl -X GET http://localhost:8080/webcrawler/search/Технология
 ]
 ```
 
-![image](https://github.com/user-attachments/assets/b7794d14-8467-462d-b0dd-e0aa6c3760ec)
+![image](https://github.com/user-attachments/assets/b37e679c-e147-4bca-9b90-8fed450cd534)
+
