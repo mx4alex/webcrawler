@@ -1,7 +1,7 @@
 host_addr: ":8080"
 start_url: "https://www.vesti.ru/"
 count_workers: 50
-max_count_links: 20
+max_count_links: 1000
 count_keywords: 50
 
 elastic:
